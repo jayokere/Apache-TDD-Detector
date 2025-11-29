@@ -1,1 +1,75 @@
-# Commit-Level-TDD-Detection
+# Apache Projects TDD Miner and Detector
+
+This tool acts as the data collection phase for a larger research project aimed at detecting **Test-Driven Development (TDD)** patterns within open-source software.
+
+Currently, this application connects to the Apache Software Foundation's public API to retrieve a comprehensive list of all projects, filters them for valid GitHub repositories, and creates a local dataset for analysis.
+
+## 📂 Project Structure
+
+```text
+.
+├── apache_miner.py           # The "Tool": Class responsible for fetching and parsing API data
+├── main.py                   # The "Workflow": Entry point that manages logic and file persistence
+├── requirements.txt          # List of Python dependencies
+├── .gitignore                # Specifies files to be ignored by Git (e.g., data/, __pycache__/)
+├── tests/                    # Unit tests folder
+│   ├── __init__.py
+│   ├── test_apache_miner.py  # Tests for the mining class
+│   └── test_main.py          # Tests for the workflow logic
+└── data/                     # Output folder (Generated automatically)
+    └── apache_projects.json  # The resulting dataset
+
+```
+## 🚀 Getting Started
+
+### Prerequisites
+* Python 3.8 or higher
+* An internet connection (for the initial data fetch)
+
+### Installation
+
+1.  **Clone the repository** (if you haven't already):
+    ```bash
+    git clone <your-repo-url>
+    cd <your-project-folder>
+    ```
+
+2.  **Install dependencies:**
+    It is recommended to run this inside a virtual environment.
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+## ⚙️ Usage
+
+To execute the miner, run the main script from the root directory:
+
+```bash
+python main.py
+```
+### How it works
+1.  **Check:** The script looks for a local file at `data/apache_projects.json`.
+2.  **Cache Hit:** If the file exists, it loads the data locally to save time and bandwidth.
+3.  **Cache Miss:** If the file is missing, it:
+    * Connects to `projects.apache.org`.
+    * Downloads the full project registry.
+    * Filters for repositories hosted on `github.com`.
+    * Creates the `data/` directory (if missing).
+    * Saves the results to `data/apache_projects.json`.
+
+## 🧪 Testing
+
+This project maintains a suite of unit tests using `unittest`. We use **mocking** to simulate API responses and file operations, ensuring tests are fast and do not rely on a live internet connection.
+
+To run all tests:
+
+```bash
+python -m unittest discover tests -p "*_test.py"
+```
+## 🗺 Roadmap
+
+- [x] **Phase 1:** Mine Apache Project Feed for GitHub links.
+- [ ] **Phase 2:** Implement TDD detection logic (scanning commit history).
+- [ ] **Phase 3:** Generate reports on TDD adoption rates across Apache projects.
+
+## 📄 License
