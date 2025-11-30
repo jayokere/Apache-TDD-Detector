@@ -6,12 +6,15 @@ from pydriller import Repository
 from typing import Dict, List
 
 # Internal Modules
-from apache_web_miner import Apache_web_miner 
+from apache_web_miner import Apache_web_miner
+from utils import measure_time 
 
 # Constants
 DATA_FILE: str = 'data/apache_projects.json'
+APACHE_URL: str = "https://projects.apache.org/json/foundation/projects.json"
 
 # Function to fetch project data either from a local file or by mining from Apache
+@measure_time 
 def fetch_project_data() -> Dict[str, List[str]]:
     # Load data from local file if it exists. Otherwise, fetch data from Apache.
     if os.path.exists(DATA_FILE):
@@ -23,8 +26,7 @@ def fetch_project_data() -> Dict[str, List[str]]:
         print("Local file not found. Mining data from Apache...")
         
         # Fetch data from Apache's projects JSON API and extract GitHub links.
-        apache_url: str = "https://projects.apache.org/json/foundation/projects.json"
-        miner = Apache_web_miner(apache_url)
+        miner = Apache_web_miner(APACHE_URL)
         miner.fetch_data()
         links: Dict[str, List[str]] = miner.get_github_links()
 
