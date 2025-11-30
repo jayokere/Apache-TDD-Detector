@@ -75,7 +75,7 @@ This project maintains a suite of unit tests using `unittest`. We use **mocking*
 To run all tests:
 
 ```bash
-python -m unittest discover tests -p "*_test.py"
+pytest -v tests/*_test.py
 ```
 ## 🗺 Roadmap
 
