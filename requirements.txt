@@ -1,3 +1,4 @@
 pydriller
 requests
 pytest
+python-dotenv

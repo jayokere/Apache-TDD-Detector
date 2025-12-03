@@ -5,7 +5,8 @@ import re
 import os
 
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
+from multiprocessing.pool import ThreadPool
 
 # Internal Modules
 import miner_intro
@@ -31,10 +32,13 @@ class RateLimitExceededError(Exception):
 
 class sort_projects:
     # Load Apache projects JSON into a module variable
-    APACHE_PROJECTS_PATH: str = Path(__file__).resolve().parent / "data" / "apache_projects.json"
-    API_err: List[str] = []
+    APACHE_PROJECTS_PATH: Path = Path(__file__).resolve().parent / "data" / "apache_projects.json"
+    # Flag to ensure we only show the unauthenticated warning once
     is_warning_shown: bool = False
     def __init__(self) -> None:
+        self.API_err: List[str] = []
+        self.num_threads: int = 50
+
         if self.APACHE_PROJECTS_PATH.exists():
             with open(self.APACHE_PROJECTS_PATH, "r", encoding="utf-8") as _f:
                 self.apache_projects: Dict[str, List[str]] = json.load(_f)
@@ -119,16 +123,44 @@ class sort_projects:
                 if isinstance(data, list):
                     return len(data)
             else:
-                self.API_err.append(f"   ⚠️ API Error {response.status_code} for {repo_url}")
-                return 0
+                return -response.status_code
             
         except RateLimitExceededError:
             # Re-raise this specific error so the main loop can catch it and stop
             raise
         except Exception as e:
-            self.API_err.append(f"⚠️ Error fetching {repo_url}: {e}")
-            return 0
+            raise Exception(f"Connection Error: {e}")
+        
+        return 0
     
+    def _analyze_project(self, args: Tuple[str, List[str]]) -> Tuple[str, List[str], int, List[str]]:
+        """
+        Worker function running in a separate thread.
+        """
+        project, links = args
+        total_commits = 0
+        errors = []
+
+        for link in links:
+            try:
+                # Fetch commit count for each link
+                count = self.get_commit_count(link)
+                
+                # Check for error codes (negative numbers)
+                if count < 0:
+                    status_code = abs(count)
+                    errors.append(f"⚠️ API Error {status_code} for {link}")
+                else:
+                    total_commits += count
+                    
+            except RateLimitExceededError:
+                raise 
+            except Exception as e:
+                # This catches the "Connection Error" raised above
+                errors.append(str(e))
+        
+        return project, links, total_commits, errors
+
     @measure_time
     def sort_by_commit_count(self) -> int:
         """
@@ -137,31 +169,47 @@ class sort_projects:
         Returns:
             len(sorted_dict) (int): The number of projects sorted.
         """
+
         # Temporary list to store (Name, Links, Count)
         scored_projects = []
         total_projects: int = len(self.apache_projects)
-        print(f"🚀 Sorting {total_projects} projects by GitHub activity...\n")
+
+        print(f"🚀 Sorting {total_projects} projects by GitHub activity (Threads: {self.num_threads})...\n")
+
+        projects_list = list(self.apache_projects.items())
         # Flag to track if the process was aborted
         aborted: bool = False 
 
-        # Fetch each project's commit count
-        for i, (project, links) in enumerate(self.apache_projects.items()):
-            total_commits: int = 0
-            for link in links:
-                try:
-                    total_commits += self.get_commit_count(link)
-                except RateLimitExceededError as e:
-                    # Catch the stop signal
-                    print(f"\n\n🛑 {e}")
-                    print("❌ Execution stopped preventing data corruption.")
-                    aborted = True
-                    break # Break inner loop
-                except Exception as e:
-                    self.API_err.append(f"⚠️ Error accessing {link}: {e}")
-            if aborted:
-                break # Break outer loop
-            scored_projects.append((project, links, total_commits))
-            miner_intro.update_progress(i + 1, total_projects, label="ANALYZING")
+        # Initialise ThreadPool
+        pool = ThreadPool(self.num_threads)
+
+        try:
+            # imap_unordered yields results as soon as they finish
+            for i, result in enumerate(pool.imap_unordered(self._analyze_project, projects_list)):
+                
+                # Unpack result from worker
+                p_name, p_links, p_count, p_errors = result
+                
+                # Aggregate data
+                scored_projects.append((p_name, p_links, p_count))
+                self.API_err.extend(p_errors)
+                
+                # Update progress bar
+                miner_intro.update_progress(i + 1, total_projects, label="ANALYZING")
+        
+        except RateLimitExceededError as e:
+            print(f"\n\n🛑 {e}")
+            print("❌ Execution stopped. Please try again later after the rate limit resets.")
+            aborted = True
+        except Exception as e:
+            # Catch other unexpected errors in the thread pool
+            print(f"\n\n⚠️ Unexpected error in thread pool: {e}")
+            aborted = True
+        finally:
+            # Ensure threads are cleaned up
+            pool.terminate()
+            pool.join()
+
         print("\n")
 
         # If we hit rate limit, we abort without writing the file
