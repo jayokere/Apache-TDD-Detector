@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Dict, List, Tuple
 from multiprocessing.pool import ThreadPool
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Internal Modules
 import miner_intro
@@ -44,6 +46,30 @@ class sort_projects:
                 self.apache_projects: Dict[str, List[str]] = json.load(_f)
         else:
             self.apache_projects = {}
+        
+        self.session = requests.Session()
+        
+        # 1. Set Auth Headers once globally
+        token = os.getenv("GITHUB_TOKEN")
+        if token:
+            self.session.headers.update({"Authorization": f"token {token}"})
+        else:
+            # Only print warning if not already shown (optional logic)
+            if not self.is_warning_shown:
+                print("💡 Running in unauthenticated mode (60 reqs/hr).")
+                self.is_warning_shown = True
+
+        # 2. Configure Retries (Try 3 times on 500/502/503 errors)
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1, 
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET"]
+        )
+        # Pool size 20 matches your thread count
+        adapter = HTTPAdapter(pool_connections=50, pool_maxsize=50, max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
     
     def get_headers(self) -> Dict[str, str]:
         """
@@ -82,10 +108,9 @@ class sort_projects:
             return 0
         
         api_url: str = repo_url.replace("github.com", "api.github.com/repos") + "/commits?per_page=1"
-        headers: Dict[str, str] = self.get_headers()
 
         try:
-            response = requests.get(api_url, headers=headers, timeout=10)
+            response = self.session.get(api_url, timeout=10)
             
             # --- RATE LIMIT CHECK ---
             # We check specific status codes OR the header value

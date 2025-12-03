@@ -1,4 +1,6 @@
 pydriller
 requests
 pytest
+pytest-mock
 python-dotenv
+tqdm

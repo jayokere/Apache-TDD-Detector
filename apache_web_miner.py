@@ -7,9 +7,12 @@ import miner_intro
 from utils import measure_time
 from typing import List, Optional, Dict
 from multiprocessing.pool import ThreadPool
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Constants
 DATA_FILE: str = 'data/apache_projects.json'
+ERROR_FILE: str = 'data/mining_errors.json'
 APACHE_URL: str = "https://projects.apache.org/json/foundation/projects.json"
 
 # Define a class to fetch data from the Apache Foundation's projects JSON API and extract GitHub links.
@@ -18,15 +21,26 @@ class Apache_web_miner:
         self.url = target_url
         self.data = {}
         self.num_threads = num_threads
+
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=1,                # Retry once
+            backoff_factor=0.5,       
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET"]
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
     
     # Fetch data from the specified URL and store it in the 'data' attribute.
     def fetch_data(self):
         try:
-            response = requests.get(self.url)
+            response = self.session.get(self.url)
             self.data = response.json()
             print(f"Data fetched successfully from {self.url}")
         except Exception as e:
-            print(f"An error occurred: {e}\n")
+            print(f"An error occurred fetching Apache registry: {e}\n")
 
     # Resolve redirects for a given link and return the final URL if it's a GitHub link.
     def resolve_redirect(self, link: str) -> Optional[str]:
@@ -35,7 +49,7 @@ class Apache_web_miner:
             if not link.startswith(('http:', 'https:')): return None
 
             # Make a HEAD request to follow redirects
-            response = requests.head(link, allow_redirects=True, timeout=5)
+            response = self.session.head(link, allow_redirects=True, timeout=5)
             
             # Check if the final URL is github.com
             if 'github.com' in response.url: return response.url
