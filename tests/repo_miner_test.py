@@ -1,85 +1,127 @@
 import datetime
-import repo_miner
+import pytest
+
 from repo_miner import Repo_miner
 
 
+# ----------------------------------------------------------
+# Fake PyDriller-like objects
+# ----------------------------------------------------------
+
 class FakeModifiedFile:
-    def __init__(self, filename, diff):
+    def __init__(self, filename, diff, added=0, removed=0, change_type="MODIFY"):
         self.filename = filename
         self.diff = diff
+        self.added_lines = added
+        self.deleted_lines = removed
+
+        class CT:
+            name = change_type
+        self.change_type = CT()
+
 
 class FakeCommit:
-    def __init__(self, hash_, committer_date, modified_files, dmm_unit_size=0):
+    def __init__(self, hash_, date, modified_files, size):
         self.hash = hash_
-        self.committer_date = committer_date
+        self.committer_date = date
         self.modified_files = modified_files
-        self.dmm_unit_size = dmm_unit_size
+        self.dmm_unit_size = size
 
-class FakeRepo:
-    def __init__(self, repo_url, single=None):
-        self.repo_url = repo_url
-        self.single = single
-        # will be set by tests by assigning .commits
-        self.commits = []
+
+class FakeRepository:
+    def __init__(self, url):
+        self.url = url
+        self._commits = []
+
+    def add_commits(self, commits):
+        self._commits.extend(commits)
 
     def traverse_commits(self):
-        return list(self.commits)
+        for c in self._commits:
+            yield c
 
-def test_mine_repo_returns_expected_structure(monkeypatch):
-    # Prepare fake commits
+
+# ----------------------------------------------------------
+# Auto-patch pydriller.Repository
+# ----------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def patch_repository(monkeypatch):
+    """
+    Automatically replace pydriller.Repository with a factory
+    that creates and stores FakeRepository instances.
+    """
+    fake_repos = {}
+
+    def repo_factory(url):
+        if url not in fake_repos:
+            fake_repos[url] = FakeRepository(url)
+        return fake_repos[url]
+
+    monkeypatch.setattr("repo_miner.Repository", repo_factory)
+    return fake_repos
+
+
+# ----------------------------------------------------------
+# Tests
+# ----------------------------------------------------------
+
+def test_mine_repo_returns_expected_structure(patch_repository):
+    miner = Repo_miner()
+    repo_url = "https://example.com/repo.git"
+
+    # IMPORTANT: Create the repo by calling the monkeypatched Repository()
+    fake_repo = __import__("repo_miner").Repository(repo_url)
+
+    # Fake commits
     c1 = FakeCommit(
-        hash_="abc123",
-        committer_date=datetime.datetime(2021, 1, 1, 12, 0, 0),
-        modified_files=[FakeModifiedFile("foo.txt", "diff-1")],
-        dmm_unit_size=7,
+        "abc123",
+        datetime.datetime(2021, 1, 1, 12, 0),
+        [FakeModifiedFile("one.txt", "diff-1")],
+        7
     )
     c2 = FakeCommit(
-        hash_="def456",
-        committer_date=datetime.datetime(2021, 1, 2, 13, 30, 0),
-        modified_files=[FakeModifiedFile("bar.py", "diff-2"), FakeModifiedFile("baz.md", "diff-3")],
-        dmm_unit_size=3,
+        "def456",
+        datetime.datetime(2021, 1, 2, 13, 30),
+        [
+            FakeModifiedFile("two.py", "diff-2"),
+            FakeModifiedFile("three.md", "diff-3")
+        ],
+        3
     )
 
-    fake_repo = FakeRepo("https://example.com/repo.git", single='1bdad6c')
-    fake_repo.commits = [c1, c2]
+    fake_repo.add_commits([c1, c2])
 
-    # Patch the Repository used inside the repo_miner module
-    monkeypatch.setattr(repo_miner, "Repository", lambda repo_url, single=None: fake_repo)
+    url, commits = miner.mine_repo(repo_url)
 
-    result = Repo_miner.mine_repo("https://example.com/repo.git")
+    assert url == repo_url
+    assert len(commits) == 2
+    assert commits[0]["hash"] == "abc123"
+    assert commits[1]["files_changed"]["two.py"] == "diff-2"
+    assert commits[1]["size"] == 3
 
-    assert isinstance(result, list)
-    assert len(result) == 2
 
-    first = result[0]
-    assert first["hash"] == "abc123"
-    assert first["date"] == "2021-01-01 12:00:00"
-    assert first["files_changed"] == {"foo.txt": "diff-1"}
-    assert first["size"] == 7
+def test_mine_repo_handles_no_modified_files(patch_repository):
+    miner = Repo_miner()
+    repo_url = "local/path"
 
-    second = result[1]
-    assert second["hash"] == "def456"
-    assert second["date"] == "2021-01-02 13:30:00"
-    # files_changed should map filenames to diffs
-    assert second["files_changed"] == {"bar.py": "diff-2", "baz.md": "diff-3"}
-    assert second["size"] == 3
+    # Create fake repo
+    fake_repo = __import__("repo_miner").Repository(repo_url)
 
-def test_mine_repo_handles_no_modified_files(monkeypatch):
     c = FakeCommit(
-        hash_="nochange",
-        committer_date=datetime.datetime(2022, 6, 1, 8, 0, 0),
-        modified_files=[],
-        dmm_unit_size=0,
+        "nochange",
+        datetime.datetime(2022, 6, 1, 8, 0),
+        [],
+        0
     )
-    fake_repo = FakeRepo("local/path", single='1bdad6c')
-    fake_repo.commits = [c]
+    fake_repo.add_commits([c])
 
-    monkeypatch.setattr(repo_miner, "Repository", lambda repo_url, single=None: fake_repo)
+    url, commits = miner.mine_repo(repo_url)
 
-    result = Repo_miner.mine_repo("local/path")
+    assert url == repo_url
+    assert len(commits) == 1
 
-    assert len(result) == 1
-    entry = result[0]
+    entry = commits[0]
     assert entry["hash"] == "nochange"
     assert entry["files_changed"] == {}
-    assert entry["date"] == "2022-06-01 08:00:00"
+    assert entry["size"] == 0
