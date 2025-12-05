@@ -14,3 +14,8 @@ venv/
 
 # Generated data files
 data/
+
+# Visual Studio Code
+.vscode/
+
+pyrightconfig.json
