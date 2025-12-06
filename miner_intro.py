@@ -31,7 +31,7 @@ def print_banner():
 
 # Simulate a Matrix-style loading animation
 def loading_animation(duration=3):
-    print("\n\033[92m[SYSTEM] Initializing Apache Data Miner...\033[0m")
+    print("\n\033[92m[SYSTEM] Initialising Apache Data Miner...\033[0m")
     
     end_time = time.time() + duration
     idx = 0
@@ -51,9 +51,19 @@ def loading_animation(duration=3):
 
 # Function to update the progress bar during the link resolution process
 def update_progress(current, total, label="PROCESSING"):
+    # Safety check: prevent division by zero
+    if total <= 0:
+        total = 1
+        
     PROGRESS_BAR_LENGTH = 40
     percent = float(current) * 100 / total
+    
+    # Ensure we don't exceed 100% visually
+    if percent > 100: percent = 100
+    
     filled_length = int(PROGRESS_BAR_LENGTH * current // total)
+    # Ensure filled length doesn't exceed bar length
+    if filled_length > PROGRESS_BAR_LENGTH: filled_length = PROGRESS_BAR_LENGTH
     
     # Visuals
     bar = '█' * filled_length + '░' * (PROGRESS_BAR_LENGTH - filled_length)

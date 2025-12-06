@@ -3,9 +3,8 @@ from pydriller import Repository
 
 # Internal Modules
 import miner_intro
+import apache_miner
 from db import get_collection
-from apache_web_miner import fetch_project_data
-from sort_projects import sort_projects
 from utils import measure_time 
 
 # Main function
@@ -13,11 +12,8 @@ from utils import measure_time
 def main() -> None:
     miner_intro.run_all()
 
-    # Fetch project data either from DB or by mining from Apache.
-    fetch_project_data()
-
-    # Update projects in MongoDB with their GitHub commit activity.
-    sort_projects().sort_by_commit_count()
+    # Run Apache GitHub Miner
+    apache_miner.run_all()
 
     # Get summary from Database
     project_count = get_collection("mined-repos").count_documents({})

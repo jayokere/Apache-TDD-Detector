@@ -35,11 +35,11 @@ jobs:
       # 4. Run the Miner
       # CRITICAL: We run the class directly to bypass the 'while True' loop 
       # in your start_daily_scheduler() function.
-      - name: Execute Miner
+      - name: Execute main.py
         env:
           # Inject secrets from GitHub Settings
           MONGODB_USER: ${{ secrets.MONGODB_USER }}
           MONGODB_PWD: ${{ secrets.MONGODB_PWD }}
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }} 
         run: |
-          python -c "from repo_miner import Repo_miner; miner = Repo_miner(); miner.run()"
+          python3 main.py

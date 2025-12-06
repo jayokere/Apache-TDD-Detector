@@ -1,7 +1,8 @@
 import os
 from dotenv import load_dotenv, find_dotenv
-from pymongo import MongoClient, ASCENDING, DESCENDING
+from pymongo import MongoClient, ASCENDING, DESCENDING, UpdateOne
 from pymongo.server_api import ServerApi
+from typing import List, Dict, Set
 
 # Load environment variables
 load_dotenv(find_dotenv())
@@ -29,7 +30,44 @@ def get_collection(collection_name):
     return db[collection_name]
 
 # -------------------------------------------------------------------------
-# Data Access Objects (DAO) - Specific Queries
+# Data Access Objects (DAO) - Repo Management
+# -------------------------------------------------------------------------
+
+def get_existing_repo_urls(collection_name: str = REPO_COLLECTION) -> Set[str]:
+    """
+    Returns a Set of repository URLs that are already stored in the DB.
+    This is used to skip mining repos we already have.
+    """
+    col = get_collection(collection_name)
+    # Fetch only the 'url' field
+    cursor = col.find({}, {'url': 1, '_id': 0})
+    return {doc['url'] for doc in cursor if 'url' in doc}
+
+def save_repo_batch(repos: List[Dict], collection_name: str = REPO_COLLECTION):
+    """
+    Performs a bulk upsert (update or insert) for a list of repository dictionaries.
+    Using bulk_write is much faster than inserting one by one.
+    """
+    if not repos:
+        return
+
+    col = get_collection(collection_name)
+    operations = []
+    
+    for repo in repos:
+        # Update the record if 'url' matches, otherwise insert it.
+        # This ensures we update commit counts for existing repos instead of duplicating them.
+        operations.append(
+            UpdateOne({"url": repo["url"]}, {"$set": repo}, upsert=True)
+        )
+    
+    if operations:
+        col.bulk_write(operations)
+        # Ensure we have an index on commits for sorting later
+        col.create_index([("commits", -1)])
+
+# -------------------------------------------------------------------------
+# Data Access Objects (DAO) - Commit Management
 # -------------------------------------------------------------------------
 
 def get_projects_to_mine():
@@ -46,10 +84,8 @@ def get_projects_to_mine():
 def get_existing_commit_hashes(project_name):
     """
     Returns a Python Set containing all commit hashes already saved for a project.
-    Used for gap-filling to ensure 100% data completeness.
     """
     col = get_collection(COMMIT_COLLECTION)
-    # Projection: Only return the hash field to save bandwidth
     cursor = col.find({"project": project_name}, {"hash": 1, "_id": 0})
     return {doc["hash"] for doc in cursor}
 
@@ -68,10 +104,7 @@ def ensure_indexes():
     """
     col = get_collection(COMMIT_COLLECTION)
     print("[DB] Ensuring indexes...")
-    # Index for fast project lookups
     col.create_index([("project", ASCENDING)])
-    # Index for checking existing hashes (Vital for get_existing_commit_hashes)
     col.create_index([("hash", ASCENDING)])
-    # Index for time-based analysis
     col.create_index([("date", DESCENDING)])
     print("[DB] Indexes verified.")
