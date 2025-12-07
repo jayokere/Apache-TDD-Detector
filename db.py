@@ -78,6 +78,29 @@ def get_projects_to_mine():
     cursor = col.find().sort("commit_count", ASCENDING)
     return list(cursor)
 
+def get_java_projects_to_mine():
+    """
+    Fetches the list of projects from 'mined-repos', sorted by commit count (Smallest first).
+    """
+    col = get_collection(REPO_COLLECTION)
+    cursor = col.find({"language":"Java"}).sort("commit_count", ASCENDING)
+    return list(cursor)  
+
+def get_python_projects_to_mine():
+    """
+    Fetches the list of projects from 'mined-repos', sorted by commit count (Smallest first).
+    """
+    col = get_collection(REPO_COLLECTION)
+    cursor = col.find({"language":"Python"}).sort("commit_count", ASCENDING)
+    return list(cursor)   
+
+def get_cpp_projects_to_mine():
+    """
+    Fetches the list of projects from 'mined-repos', sorted by commit count (Smallest first).
+    """
+    col = get_collection(REPO_COLLECTION)
+    cursor = col.find({"language":"C++"}).sort("commit_count", ASCENDING)
+    return list(cursor) 
 def get_existing_commit_hashes(project_name):
     """
     Returns a Python Set containing all commit hashes already saved for a project.
