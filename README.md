@@ -80,7 +80,7 @@ pytest -v tests/*_test.py
 ## 🗺 Roadmap
 
 - [x] **Phase 1:** Mine Apache Project Feed for GitHub links.
-- [ ] **Phase 3:** Mine Github Links for commits
+- [ ] **Phase 2:** Mine Github Links for commits
 - [ ] **Phase 3:** Implement TDD detection logic (scanning commit history).
 - [ ] **Phase 4:** Generate reports on TDD adoption rates across Apache projects.
 
