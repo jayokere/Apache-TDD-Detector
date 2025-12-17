@@ -40,7 +40,8 @@ Key Features:
 
 # The number of commits to hold in memory before performing a bulk write to MongoDB.
 # Larger batches reduce network latency but increase memory consumption.
-BATCH_SIZE = 2000 
+# Make this tunable via env var BATCH_SIZE (default 1000).
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", "1000"))
 
 # Whitelist of file extensions to classify as "Source Code" or "Test Code".
 # Non-functional files (e.g., .md, .txt, .xml) are excluded to optimise storage and processing time.
@@ -318,6 +319,12 @@ class Repo_miner:
             return (project_name, 0, 0, "Skipped: Invalid or missing URL")
 
         try:
+            # Log worker activity by default (disable with SHOW_WORKER_ACTIVITY=0)
+            show_activity = os.getenv("SHOW_WORKER_ACTIVITY", "1") != "0"
+            if show_activity:
+                worker_id = os.getpid()
+                print(f"[WORKER {worker_id}] ⚙️  Starting {project_name}...", flush=True)
+            
             # --- DUPLICATE PREVENTION ---
             # Retrieve all commit hashes already stored for this project.
             # This allows the miner to skip previously processed commits, enabling 
@@ -325,8 +332,15 @@ class Repo_miner:
             existing_hashes = get_existing_commit_hashes(project_name)
             initial_count = len(existing_hashes)
             
+            if show_activity:
+                worker_id = os.getpid()
+                print(f"[WORKER {worker_id}] 📥 Cloning {project_name}...", flush=True)
+            
             # Initialise the Pydriller Repository object
-            repo_miner = Repository(repo_url)
+            repo_miner = Repository(
+                repo_url,
+                only_modifications_with_file_types=list(VALID_CODE_EXTENSIONS)
+                )
             commits_buffer = []
             new_commits_mined = 0
             
@@ -345,9 +359,6 @@ class Repo_miner:
                     continue
 
                 # --- METRIC EXTRACTION ---
-                # Note: DMM is a commit-level metric in PyDriller, representing the 
-                # maintainability risk profile of the change.
-                dmm_unit_size = commit.dmm_unit_size
 
                 # Process individual files to extract complexity and method changes
                 processed_files = []
@@ -369,7 +380,8 @@ class Repo_miner:
                     'repo_url': repo_url,
                     'hash': commit.hash,
                     'committer_date': commit.committer_date,
-                    'dmm_unit_size': dmm_unit_size, 
+                    'lines_added': commit.insertions,
+                    'lines_removed': commit.deletions,
                     'modified_files': processed_files,
                     'test_coverage': test_coverage
                 }
@@ -385,6 +397,10 @@ class Repo_miner:
             # Save any remaining commits in the buffer after the loop concludes
             if commits_buffer:
                 save_commit_batch(commits_buffer)
+            
+            if show_activity:
+                worker_id = os.getpid()
+                print(f"[WORKER {worker_id}] ✅ Completed {project_name} ({new_commits_mined} new commits).", flush=True)
         
             return (project_name, new_commits_mined, initial_count, None)
             
@@ -417,10 +433,15 @@ class Repo_miner:
         total_jobs = len(jobs)
         print(f"[INFO] Starting RICH-METRIC mining cycle for {total_jobs} repositories...")
         
-        # Determine number of workers based on available CPU cores to ensure full performance
-        # Allow modest oversubscription to better hide I/O latency; safe for I/O-heavy tasks
-        max_workers = (os.cpu_count() or 4) * 2
-        max_workers = min(total_jobs, max_workers)
+        # Determine number of workers based on available CPU cores.
+        # Allow overriding via MAX_WORKERS env var to cap concurrency for large repos.
+        env_max = os.getenv("MAX_WORKERS")
+        if env_max and env_max.isdigit():
+            max_workers = int(env_max)
+        else:
+            # Default: modest oversubscription to hide I/O latency on small repos
+            max_workers = (os.cpu_count() or 6) * 2
+        max_workers = max(1, min(total_jobs, max_workers))
         
         print(f"[INFO] Using {max_workers} worker processes")
         

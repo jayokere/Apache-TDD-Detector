@@ -183,6 +183,8 @@ def test_mine_repo_success(mock_db, mock_pydriller):
     mock_commit = MagicMock()
     mock_commit.hash = "hash123"
     mock_commit.committer_date = "2023-01-01"
+    mock_commit.insertions = 42
+    mock_commit.deletions = 15
     
     # Mock the DMM property on the commit
     type(mock_commit).dmm_unit_size = PropertyMock(return_value=0.5)
@@ -224,8 +226,16 @@ def test_mine_repo_success(mock_db, mock_pydriller):
     mock_db['save'].assert_called()
     saved_data = mock_db['save'].call_args[0][0][0] # First arg, first item in list
     
+    # Verify core commit fields
     assert saved_data['hash'] == "hash123"
-    assert saved_data['dmm_unit_size'] == 0.5
+    assert saved_data['project'] == "test-project"
+    assert saved_data['repo_url'] == "http://github.com/test"
+    assert saved_data['committer_date'] == "2023-01-01"
+    assert saved_data['lines_added'] == 42
+    assert saved_data['lines_removed'] == 15
+    
+    # Verify modified_files structure
+    assert len(saved_data['modified_files']) == 1
     assert saved_data['modified_files'][0]['filename'] == "Test.java"
     assert saved_data['modified_files'][0]['complexity'] == 10
     assert saved_data['modified_files'][0]['changed_methods'] == ["doSomething"]

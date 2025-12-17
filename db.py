@@ -12,17 +12,32 @@ DB_NAME = "mined-data"
 REPO_COLLECTION = "mined-repos"
 COMMIT_COLLECTION = "mined-commits"
 
+# Module-level, per-process Mongo client (reused across calls)
+_CLIENT = None
+
 def get_db_connection():
-    """Establishes connection to the database."""
+    """Establishes (or reuses) a per-process connection to the database."""
+    global _CLIENT
+
     user = os.getenv('MONGODB_USER')
     pwd = os.getenv('MONGODB_PWD')
-    
+
     if not user or not pwd:
         raise ValueError("MongoDB credentials not found in environment variables.")
 
-    connection_string = f"mongodb+srv://{user}:{pwd}@mined-repos.gt9vypu.mongodb.net/?appName=Mined-Repos"
-    client = MongoClient(connection_string, server_api=ServerApi('1'))
-    return client[DB_NAME]
+    if _CLIENT is None:
+        connection_string = (
+            f"mongodb+srv://{user}:{pwd}@mined-repos.gt9vypu.mongodb.net/?appName=Mined-Repos"
+        )
+        # Add sane timeouts to reduce long DNS/server selection waits
+        _CLIENT = MongoClient(
+            connection_string,
+            server_api=ServerApi('1'),
+            serverSelectionTimeoutMS=int(os.getenv('MONGO_SERVER_SELECTION_TIMEOUT_MS', '5000')),
+            connectTimeoutMS=int(os.getenv('MONGO_CONNECT_TIMEOUT_MS', '5000')),
+        )
+
+    return _CLIENT[DB_NAME]
 
 def get_collection(collection_name):
     """Generic helper to get a collection."""
@@ -112,11 +127,12 @@ def get_existing_commit_hashes(project_name):
 def save_commit_batch(commits):
     """
     Inserts a list of commit dictionaries into the database.
+    Uses unordered insert to improve throughput and reduce tail latency.
     """
     if not commits:
         return
     col = get_collection(COMMIT_COLLECTION)
-    col.insert_many(commits)
+    col.insert_many(commits, ordered=False)
 
 def ensure_indexes():
     """
@@ -126,7 +142,8 @@ def ensure_indexes():
     print("[DB] Ensuring indexes...")
     col.create_index([("project", ASCENDING)])
     col.create_index([("hash", ASCENDING)])
-    col.create_index([("date", DESCENDING)])
+    # Align index with stored field name in commit docs
+    col.create_index([("committer_date", DESCENDING)])
     print("[DB] Indexes verified.")
     
 def get_all_mined_project_names():
