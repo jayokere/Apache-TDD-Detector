@@ -12,12 +12,10 @@ from db import (
     get_java_projects_to_mine,
     get_python_projects_to_mine,
     get_cpp_projects_to_mine, 
-    get_existing_commit_hashes, 
-    save_commit_batch, 
     ensure_indexes,
-    # Note: Ensure this function is added to db.py as discussed
     get_all_mined_project_names 
 )
+from miners import FileAnalyser, TestAnalyser, CommitProcessor
 
 """
 repo_miner.py
@@ -42,14 +40,6 @@ Key Features:
 # Larger batches reduce network latency but increase memory consumption.
 # Make this tunable via env var BATCH_SIZE (default 1000).
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "1000"))
-
-# Whitelist of file extensions to classify as "Source Code" or "Test Code".
-# Non-functional files (e.g., .md, .txt, .xml) are excluded to optimise storage and processing time.
-VALID_CODE_EXTENSIONS = {
-    '.java', '.py', '.js', '.ts', '.c', '.cpp', '.h', '.hpp', 
-    '.cs', '.go', '.rb', '.php', '.scala', '.kt', '.rs', '.swift', 
-    '.m', '.mm', '.groovy', '.clj'
-}
 
 class Repo_miner:
     """
@@ -138,18 +128,7 @@ class Repo_miner:
         Returns:
             bool: True if the file should be mined, False otherwise.
         """
-        if not file.filename: return False
-        
-        # 1. Identify Test files explicitly by filename conventions (e.g., 'CalculatorTest.java')
-        if "test" in file.filename.lower():
-            return True
-
-        # 2. Identify Source Code by checking the file extension against the approved whitelist
-        _, ext = os.path.splitext(file.filename)
-        if ext.lower() in VALID_CODE_EXTENSIONS:
-            return True
-            
-        return False
+        return FileAnalyser.is_valid_file(file)
     
     @staticmethod
     def is_test_file(filename):
@@ -162,93 +141,7 @@ class Repo_miner:
         Returns:
             bool: True if the file is a test file, False otherwise.
         """
-        if not filename:
-            return False
-        
-        lower_filename = filename.lower()
-        # Common test file patterns
-        test_patterns = ['test', 'tests', 'spec', 'specs']
-        return any(pattern in lower_filename for pattern in test_patterns)
-    
-    @staticmethod
-    def extract_tested_files_from_methods(test_methods, all_files):
-        """
-        Identifies which source files are being tested based on test method names.
-        
-        This function analyzes test method names to extract the class/module names
-        being tested, then matches them against the list of modified files.
-        
-        Common patterns recognized:
-        - testMethodName / test_method_name
-        - TestClassName / test_class_name
-        - Method names containing the tested class name
-        
-        Args:
-            test_methods (list): List of test method names.
-            all_files (list): List of all file objects in the commit.
-            
-        Returns:
-            list: List of filenames that are likely being tested.
-        """
-        if not test_methods or not all_files:
-            return []
-        
-        tested_files = set()
-        
-        # Extract potential class/module names from test methods
-        # Example: testCalculatorAdd -> Calculator
-        # Example: test_square_area -> square
-        tested_components = set()
-        
-        for method_name in test_methods:
-            if not method_name:
-                continue
-            
-            method_lower = method_name.lower()
-            
-            # Remove common test prefixes/suffixes
-            cleaned = method_lower
-            for prefix in ['test_', 'test', 'should_', 'should', 'when_', 'when']:
-                if cleaned.startswith(prefix):
-                    cleaned = cleaned[len(prefix):]
-                    break
-            
-            for suffix in ['_test', 'test', '_spec', 'spec']:
-                if cleaned.endswith(suffix):
-                    cleaned = cleaned[:-len(suffix)]
-                    break
-            
-            # Split by underscores or camelCase to extract component names
-            # Example: calculate_area -> ['calculate', 'area']
-            parts = cleaned.split('_')
-            tested_components.update(parts)
-            
-            # Also handle camelCase: calculateArea -> ['calculate', 'Area']
-            import re
-            camel_parts = re.findall(r'[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\d|\W|$)|\d+', method_name)
-            tested_components.update([p.lower() for p in camel_parts if len(p) > 2])
-        
-        # Match extracted components against source files
-        for file_obj in all_files:
-            if not file_obj.filename:
-                continue
-            
-            # Skip test files themselves
-            if Repo_miner.is_test_file(file_obj.filename):
-                continue
-            
-            # Extract base filename without path and extension
-            base_filename = os.path.basename(file_obj.filename)
-            filename_without_ext = os.path.splitext(base_filename)[0].lower()
-            
-            # Check if any tested component matches this filename
-            for component in tested_components:
-                if component and len(component) > 2:  # Ignore very short matches
-                    if component in filename_without_ext or filename_without_ext in component:
-                        tested_files.add(file_obj.filename)
-                        break
-        
-        return list(tested_files)
+        return TestAnalyser.is_test_file(filename)
     
     @staticmethod
     def analyze_test_coverage(modified_files):
@@ -259,42 +152,9 @@ class Repo_miner:
             modified_files (list): List of ModifiedFile objects from a commit.
             
         Returns:
-            dict: A dictionary containing:
-                - 'test_files': List of test file information
-                - 'source_files': List of source file information
-                - 'tested_files': List of source files that have associated tests
+            dict: A dictionary containing test_files, source_files, and tested_files.
         """
-        test_files = []
-        source_files = []
-        all_test_methods = []
-        
-        # First pass: categorize files and collect test methods
-        for f in modified_files:
-            if not f.filename:
-                continue
-            
-            file_info = {
-                'filename': f.filename,
-                'changed_methods': [m.name for m in f.changed_methods] if f.changed_methods else []
-            }
-            
-            if Repo_miner.is_test_file(f.filename):
-                test_files.append(file_info)
-                all_test_methods.extend(file_info['changed_methods'])
-            else:
-                source_files.append(file_info)
-        
-        # Second pass: identify which source files are being tested
-        tested_files = Repo_miner.extract_tested_files_from_methods(
-            all_test_methods,
-            modified_files
-        )
-        
-        return {
-            'test_files': test_files,
-            'source_files': source_files,
-            'tested_files': tested_files
-        }
+        return TestAnalyser.analyze_test_coverage(modified_files)
 
     @staticmethod
     def mine_repo(args):
@@ -325,78 +185,24 @@ class Repo_miner:
                 worker_id = os.getpid()
                 tqdm.write(f"[WORKER {worker_id}] ⚙️  Starting {project_name}...")
             
-            # --- DUPLICATE PREVENTION ---
-            # Retrieve all commit hashes already stored for this project.
-            # This allows the miner to skip previously processed commits, enabling 
-            # resumable execution if the script is interrupted.
-            existing_hashes = get_existing_commit_hashes(project_name)
-            initial_count = len(existing_hashes)
-            
             if show_activity:
                 worker_id = os.getpid()
                 tqdm.write(f"[WORKER {worker_id}] 📥 Cloning {project_name}...")
             
             # Initialise the Pydriller Repository object
-            repo_miner = Repository(
+            from miners.file_analyser import VALID_CODE_EXTENSIONS
+            repo_obj = Repository(
                 repo_url,
                 only_modifications_with_file_types=list(VALID_CODE_EXTENSIONS)
-                )
-            commits_buffer = []
-            new_commits_mined = 0
+            )
             
-            # Traverse the git history of the repository
-            for commit in repo_miner.traverse_commits():
-                if stop_event.is_set(): return None
-                
-                # Check: If hash exists in the DB, skip processing entirely
-                if commit.hash in existing_hashes: 
-                    continue
-
-                # Filter: Only keep relevant files (Source/Tests) based on criteria
-                relevant_files_objs = [f for f in commit.modified_files if Repo_miner.is_valid_file(f)]
-                
-                if not relevant_files_objs:
-                    continue
-
-                # --- METRIC EXTRACTION ---
-
-                # Process individual files to extract complexity and method changes
-                processed_files = []
-                for f in relevant_files_objs:
-                    processed_files.append({
-                        "filename": f.filename,
-                        # Cyclomatic Complexity (MCC)
-                        "complexity": f.complexity, 
-                        # Extract only the method names from the Method objects list
-                        "changed_methods": [m.name for m in f.changed_methods]
-                    })
-                
-                # Analyze test coverage to identify tested files
-                test_coverage = Repo_miner.analyze_test_coverage(relevant_files_objs)
-
-                # Construct the document object for MongoDB
-                commit_info = {
-                    'project': project_name,
-                    'repo_url': repo_url,
-                    'hash': commit.hash,
-                    'committer_date': commit.committer_date,
-                    'lines_added': commit.insertions,
-                    'lines_removed': commit.deletions,
-                    'modified_files': processed_files,
-                    'test_coverage': test_coverage
-                }
-                
-                commits_buffer.append(commit_info)
-                new_commits_mined += 1
-
-                # Batch write to DB to avoid hitting database connection limits
-                if len(commits_buffer) >= BATCH_SIZE:
-                    save_commit_batch(commits_buffer)
-                    commits_buffer = []
-
-            # Save any remaining commits in the buffer after the loop concludes
-            if commits_buffer:
-                save_commit_batch(commits_buffer)
+            # Use CommitProcessor to traverse and extract metrics
+            processor = CommitProcessor(batch_size=BATCH_SIZE)
+            new_commits_mined, initial_count = processor.process_commits(
+                repo_obj, 
+                project_name, 
+                repo_url
+            )
             
             if show_activity:
                 worker_id = os.getpid()

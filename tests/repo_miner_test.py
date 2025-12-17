@@ -1,6 +1,8 @@
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock
-from repo_miner import Repo_miner, VALID_CODE_EXTENSIONS
+from repo_miner import Repo_miner
+from miners.file_analyser import FileAnalyser, VALID_CODE_EXTENSIONS
+from miners.test_analyser import TestAnalyser
 
 # --- Fixtures to mock external dependencies ---
 
@@ -10,8 +12,8 @@ def mock_db():
     with patch('repo_miner.get_java_projects_to_mine') as mock_java, \
          patch('repo_miner.get_python_projects_to_mine') as mock_python, \
          patch('repo_miner.get_cpp_projects_to_mine') as mock_cpp, \
-         patch('repo_miner.get_existing_commit_hashes') as mock_hashes, \
-         patch('repo_miner.save_commit_batch') as mock_save:
+         patch('miners.commit_processor.get_existing_commit_hashes') as mock_hashes, \
+         patch('miners.commit_processor.save_commit_batch') as mock_save:
         
         # Setup sample return values
         mock_java.return_value = [{'name': 'java-repo', 'url': 'http://github.com/test/java'}]
@@ -107,7 +109,7 @@ def test_extract_tested_files_from_methods():
     # Test methods that reference square and triangle
     test_methods = ["test_square_area", "test_triangle_perimeter", "test_shape_color"]
     
-    tested_files = Repo_miner.extract_tested_files_from_methods(test_methods, mock_files)
+    tested_files = TestAnalyser.extract_tested_files_from_methods(test_methods, mock_files)
     
     # Should identify square.py, triangle.py, and shapes.py as tested
     assert "square.py" in tested_files
