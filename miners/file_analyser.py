@@ -6,9 +6,7 @@ import os
 
 # Whitelist of file extensions to classify as "Source Code" or "Test Code".
 VALID_CODE_EXTENSIONS = {
-    '.java', '.py', '.js', '.ts', '.c', '.cpp', '.h', '.hpp', 
-    '.cs', '.go', '.rb', '.php', '.scala', '.kt', '.rs', '.swift', 
-    '.m', '.mm', '.groovy', '.clj'
+    '.java', '.py', '.cpp', 
 }
 
 
@@ -53,6 +51,6 @@ class FileAnalyser:
         """
         return {
             "filename": file.filename,
-            "complexity": file.complexity,
+            "complexity": 0,
             "changed_methods": [m.name for m in file.changed_methods] if file.changed_methods else []
         }
