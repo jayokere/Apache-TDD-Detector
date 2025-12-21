@@ -8,6 +8,7 @@ This addresses GitHub Issue #4 by showing how the code correctly identifies:
 import pytest
 from unittest.mock import MagicMock
 from repo_miner import Repo_miner
+from miners import TestAnalyser
 
 
 class TestFileDetectionScenarios:
@@ -52,7 +53,7 @@ class TestFileDetectionScenarios:
         mock_files.append(shapes)
         
         # Run the analysis
-        coverage = Repo_miner.analyze_test_coverage(mock_files)
+        coverage = TestAnalyser.analyze_test_coverage(mock_files)
         
         # Verify results
         print("\n=== Scenario: shapes_test.py testing multiple files ===")
@@ -101,7 +102,7 @@ class TestFileDetectionScenarios:
         util.changed_methods = []
         mock_files.append(util)
         
-        coverage = Repo_miner.analyze_test_coverage(mock_files)
+        coverage = TestAnalyser.analyze_test_coverage(mock_files)
         
         print("\n=== Scenario: Java-style camelCase naming ===")
         print(f"Test files: {[f['filename'] for f in coverage['test_files']]}")
@@ -132,7 +133,7 @@ class TestFileDetectionScenarios:
         processor.changed_methods = []
         mock_files.append(processor)
         
-        coverage = Repo_miner.analyze_test_coverage(mock_files)
+        coverage = TestAnalyser.analyze_test_coverage(mock_files)
         
         print("\n=== Scenario: Python snake_case naming ===")
         print(f"Test files: {[f['filename'] for f in coverage['test_files']]}")
@@ -168,7 +169,7 @@ class TestFileDetectionScenarios:
         service.changed_methods = []
         mock_files.append(service)
         
-        coverage = Repo_miner.analyze_test_coverage(mock_files)
+        coverage = TestAnalyser.analyze_test_coverage(mock_files)
         
         print("\n=== Scenario: Multiple test files for one source ===")
         print(f"Test files: {[f['filename'] for f in coverage['test_files']]}")
@@ -201,7 +202,7 @@ class TestFileDetectionScenarios:
         button.changed_methods = []
         mock_files.append(button)
         
-        coverage = Repo_miner.analyze_test_coverage(mock_files)
+        coverage = TestAnalyser.analyze_test_coverage(mock_files)
         
         print("\n=== Scenario: Spec-style naming ===")
         print(f"Test files: {[f['filename'] for f in coverage['test_files']]}")
@@ -231,7 +232,7 @@ class TestFileDetectionScenarios:
         bar.changed_methods = []
         mock_files.append(bar)
         
-        coverage = Repo_miner.analyze_test_coverage(mock_files)
+        coverage = TestAnalyser.analyze_test_coverage(mock_files)
         
         print("\n=== Scenario: No matching source files ===")
         print(f"Test files: {[f['filename'] for f in coverage['test_files']]}")
@@ -262,7 +263,7 @@ class TestFileDetectionScenarios:
         a_file.changed_methods = []
         mock_files.append(a_file)
         
-        coverage = Repo_miner.analyze_test_coverage(mock_files)
+        coverage = TestAnalyser.analyze_test_coverage(mock_files)
         
         print("\n=== Edge Case: Very short names ===")
         print(f"Tested files: {coverage['tested_files']}")
@@ -295,7 +296,7 @@ def test_method_extraction_details():
         mock_files[0].changed_methods = []
         
         # Extract components using the actual function
-        result = Repo_miner.extract_tested_files_from_methods([method_name], mock_files)
+        result = TestAnalyser.extract_tested_files_from_methods([method_name], mock_files)
         
         print(f"\nMethod: {method_name}")
         print(f"  Expected components: {expected}")
