@@ -97,7 +97,7 @@ def get_existing_repo_urls(collection_name: str = REPO_COLLECTION) -> Set[str]:
     This is used to skip mining repos we already have.
     """
     col = get_collection(collection_name)
-    # Fetch only the 'url' field
+    # Fetch only the 'repo_url' field
     cursor = col.find({}, {'repo_url': 1, '_id': 0})
     return {doc['repo_url'] for doc in cursor if 'repo_url' in doc}
 
