@@ -347,10 +347,6 @@ class Repo_miner:
                     print("\n\n🛑 STOPPING MINER! Terminating processes...")
                     stop_event.set()
                     for f in futures: f.cancel()
-                finally:
-                    stop_event.set()
-                    for f in futures:
-                        if not f.done(): f.cancel()
             
             # Stop monitor if not already stopped
             if monitor.running:
