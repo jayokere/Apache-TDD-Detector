@@ -56,9 +56,9 @@ def get_existing_repo_urls(collection_name: str = REPO_COLLECTION) -> Set[str]:
     This is used to skip mining repos we already have.
     """
     col = get_collection(collection_name)
-    # Fetch only the 'url' field
-    cursor = col.find({}, {'url': 1, '_id': 0})
-    return {doc['url'] for doc in cursor if 'url' in doc}
+    # Fetch only the 'repo_url' field
+    cursor = col.find({}, {'repo_url': 1, '_id': 0})
+    return {doc['repo_url'] for doc in cursor if 'repo_url' in doc}
 
 def save_repo_batch(repos: List[Dict], collection_name: str = REPO_COLLECTION):
     """
@@ -72,10 +72,18 @@ def save_repo_batch(repos: List[Dict], collection_name: str = REPO_COLLECTION):
     operations = []
     
     for repo in repos:
+        # Handle transition: If input has 'url', remap it to 'repo_url'
+        if 'url' in repo and 'repo_url' not in repo:
+            repo['repo_url'] = repo.pop('url')
+            
+        # Skip if no URL found
+        if 'repo_url' not in repo:
+            continue
+        
         # Update the record if 'url' matches, otherwise insert it.
         # This ensures we update commit counts for existing repos instead of duplicating them.
         operations.append(
-            UpdateOne({"url": repo["url"]}, {"$set": repo}, upsert=True)
+            UpdateOne({"repo_url": repo["repo_url"]}, {"$set": repo}, upsert=True)
         )
     
     if operations:
