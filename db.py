@@ -19,9 +19,9 @@ _CLIENT = None
 # Flag to ensure we only ask the user once per run
 _CHOICE_MADE = False
 
-def get_db_connection():
-    """Establishes (or reuses) a per-process connection to the database."""
-    global _CLIENT, _CHOICE_MADE
+def ask_user():
+    """Prompts the user to select the database connection mode."""
+    global _CHOICE_MADE
 
     if not _CHOICE_MADE and sys.stdin.isatty() and not os.getenv("DB_MODE_SELECTED"):
         print("\n" + "="*50)
@@ -50,6 +50,13 @@ def get_db_connection():
         os.environ["DB_MODE_SELECTED"] = "True"
         _CHOICE_MADE = True
         print("-" * 50 + "\n")
+
+def get_db_connection():
+    """Establishes (or reuses) a per-process connection to the database."""
+    global _CLIENT, _CHOICE_MADE
+
+    if not _CHOICE_MADE:
+        ask_user()
 
     # ---------------------------------------------------------
     # CONNECTION LOGIC
