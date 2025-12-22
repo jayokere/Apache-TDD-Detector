@@ -4,6 +4,7 @@ from multiprocessing import Manager
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from pydriller import Repository
+from urllib.parse import urlparse
 import random
 from datetime import datetime
 import requests
@@ -144,9 +145,15 @@ class Repo_miner:
         
         # LOGIC: If C++, use GitHub API to get the real start year without cloning
         if language == 'C++':
+
             try:
-                # Convert raw URL to API URL
-                if "github.com" in raw_url:
+                if not raw_url:
+                    return []
+            
+                parsed_url = urlparse(raw_url)
+                # Check if the hostname (domain) is github.com
+                if parsed_url.hostname and "github.com" in parsed_url.hostname.lower():
+                    # Convert raw URL to API URL
                     parts = raw_url.strip("/").split("/")
                     if len(parts) >= 2:
                         owner, repo = parts[-2], parts[-1]
