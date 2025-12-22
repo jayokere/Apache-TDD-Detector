@@ -54,7 +54,7 @@ class CommitProcessor:
             processed_files = [FileAnalyser.extract_file_metrics(f) for f in relevant_files_objs]
             
             # Analyze test coverage
-            test_coverage = TestAnalyser.analyze_test_coverage(relevant_files_objs)
+            test_relations = TestAnalyser.map_test_relations(relevant_files_objs)
             
             # Construct the document object for MongoDB
             commit_info = {
@@ -65,7 +65,7 @@ class CommitProcessor:
                 'lines_added': commit.insertions,
                 'lines_removed': commit.deletions,
                 'modified_files': processed_files,
-                'test_coverage': test_coverage
+                'test_relations': test_relations
             }
             
             commits_buffer.append(commit_info)
