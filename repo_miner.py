@@ -42,7 +42,7 @@ Key Features:
 # The number of commits to hold in memory before performing a bulk write to MongoDB.
 # Larger batches reduce network latency but increase memory consumption.
 # Make this tunable via env var BATCH_SIZE (default set to 100 for safety with large C++ files)
-BATCH_SIZE = int(os.getenv("BATCH_SIZE", "100")) 
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", "250")) 
 # Whether to print per-worker activity logs. Default off to avoid progress bar churn; enable with SHOW_WORKER_ACTIVITY=1.
 SHOW_WORKER_ACTIVITY = os.getenv("SHOW_WORKER_ACTIVITY", "0") == "1"
 

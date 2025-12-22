@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv, find_dotenv
 from pymongo import MongoClient, ASCENDING, DESCENDING, UpdateOne
+from pymongo.errors import PyMongoError, AutoReconnect, DocumentTooLarge
 from pymongo.server_api import ServerApi
 from typing import List, Dict, Set
 
@@ -33,8 +34,9 @@ def get_db_connection():
         _CLIENT = MongoClient(
             connection_string,
             server_api=ServerApi('1'),
-            serverSelectionTimeoutMS=int(os.getenv('MONGO_SERVER_SELECTION_TIMEOUT_MS', '5000')),
-            connectTimeoutMS=int(os.getenv('MONGO_CONNECT_TIMEOUT_MS', '5000')),
+            serverSelectionTimeoutMS=int(os.getenv('MONGO_SERVER_SELECTION_TIMEOUT_MS', '30000')),
+            connectTimeoutMS=int(os.getenv('MONGO_CONNECT_TIMEOUT_MS', '30000')),
+            socketTimeoutMS=int(os.getenv('MONGO_SOCKET_TIMEOUT_MS', '30000')),
         )
 
     return _CLIENT[DB_NAME]
@@ -132,7 +134,32 @@ def save_commit_batch(commits):
     if not commits:
         return
     col = get_collection(COMMIT_COLLECTION)
-    col.insert_many(commits, ordered=False)
+    try:
+        # Try to insert the whole batch at once
+        col.insert_many(commits, ordered=False)
+        
+    except (AutoReconnect, PyMongoError, OSError) as e:
+        # If the batch is too large (Errno 34) or connection drops, we split it.
+        # This is the "Divide and Conquer" strategy.
+        size = len(commits)
+        
+        # Base case: If we are down to 1 commit and it still fails, log and skip it.
+        if size <= 1:
+            # Check if it's specifically a document size issue (MongoDB limit is 16MB)
+            if isinstance(e, DocumentTooLarge) or "Result too large" in str(e):
+                print(f"[DB WARN] Skipped single commit due to size limit: {commits[0].get('hash', 'unknown')}")
+            else:
+                print(f"[DB ERROR] Failed to save commit: {e}")
+            return
+
+        # Recursive step: Split batch into two halves
+        mid = size // 2
+        left_batch = commits[:mid]
+        right_batch = commits[mid:]
+        
+        # Retry both halves recursively
+        save_commit_batch(left_batch)
+        save_commit_batch(right_batch)
 
 def ensure_indexes():
     """
