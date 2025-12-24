@@ -6,6 +6,8 @@ from db import get_collection, COMMIT_COLLECTION, REPO_COLLECTION
 from bson.json_util import dumps
 from typing import List, Dict, Any, Optional
 import os
+import argparse
+from datetime import datetime
 
 STATIC_ANALYSIS_OUTPUT_FILE = "analysis-output/{}_static_analysis.txt" 
 SAMPLE_COUNT = 60
@@ -60,8 +62,13 @@ class Static_Analysis:
             for pattern in tdd_patterns:
                 self.log_if_verbose(f"{dumps(pattern, indent=2)}\n")
 
-            completion_percentage = (i / project_count * 100)
-            self.log_if_verbose(f"Analysis progress: {completion_percentage:.2f}% ({i}/{project_count})")
+            count += 1
+
+            completion_percentage = ((i+1) / project_count * 100)
+            if self._isVerbose:
+                print(f"Analysis progress: {completion_percentage:.2f}% ({i+1}/{project_count})")
+            else:
+                print(f"\rAnalysis progress: {completion_percentage:.2f}% ({i+1}/{project_count})", end='', flush=True)
 
     def _get_project_names(self) -> List[str]:
         """Get a sorted list of project names for the specified project from the repos collection."""
@@ -215,11 +222,13 @@ class Static_Analysis:
     
     def log_totals(self):
         """Print the total number of repos and commits stored in the database."""
+        analysis_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         repo_count = self.repos.count_documents({})
         commit_count = self.commits.count_documents({})
         java_repo_count = self.repos.count_documents({"language": "Java"})
         python_repo_count = self.repos.count_documents({"language": "Python"})
         cpp_repo_count = self.repos.count_documents({"language": "C++"})
+        self.output_log += f"Analysis Date and Time: {analysis_datetime}\n"
         self.output_log += f"Total repositories: {repo_count}\n"
         self.output_log += f"Total commits: {commit_count}\n"
         self.output_log += f"Total Java repositories: {java_repo_count}\n"
@@ -255,8 +264,24 @@ class Static_Analysis:
             print(f"Error writing to file {filepath}: {e}")
 
 def main() -> None:
-    analysis = Static_Analysis(commits, repos, PYTHON) # Change to specificy langauge; JAVA, PYTHON or CPP
-    analysis.set_is_verbose(True) # Set verbose logging True or False
+    parser = argparse.ArgumentParser(description="Analyze TDD patterns in commits for a specific language")
+    parser.add_argument(
+        '-l', '--language',
+        type=str,
+        choices=[JAVA, PYTHON, CPP],
+        required=True,
+        help="Programming language to analyze (\"Java\", \"Python\", or \"C++\")"
+    )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help="Enable verbose logging"
+    )
+    
+    args = parser.parse_args()
+    
+    analysis = Static_Analysis(commits, repos, args.language)
+    analysis.set_is_verbose(args.verbose)
     analysis.log_totals()
     analysis.analyze()
     analysis.log_final_analysis_results()
