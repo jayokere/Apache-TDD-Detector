@@ -19,3 +19,6 @@ data/
 .vscode/
 
 pyrightconfig.json
+
+# Analysis Output
+analysis-output/
