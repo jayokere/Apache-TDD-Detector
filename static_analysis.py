@@ -29,6 +29,7 @@ class Static_Analysis:
         self._isVerbose = False
         self.output_log = ""
         self._projects_with_tdd_detected_count = 0
+        self._tdd_adoption_rate_list = []
     
     def analyze(self):
         """Analyze commits for TDD patterns within the same commit or across consecutive commits."""
@@ -58,6 +59,7 @@ class Static_Analysis:
             if tdd_patterns:
                 self._projects_with_tdd_detected_count += 1
                 self.output_log += f"TDD detected in project \"{name}\". Detection count set to {self._projects_with_tdd_detected_count}.\n"
+                self._tdd_adoption_rate_list.append(percentage)
 
             for pattern in tdd_patterns:
                 self.log_if_verbose(f"{dumps(pattern, indent=2)}\n")
@@ -239,6 +241,22 @@ class Static_Analysis:
         """Log the percentage of projects with TDD detected over the sample count."""
         percentage = (self._projects_with_tdd_detected_count / SAMPLE_COUNT * 100) if SAMPLE_COUNT > 0 else 0
         self.output_log += f"\nFinal Results: {percentage:.2f}% of {self._language} projects ({self._projects_with_tdd_detected_count}/{SAMPLE_COUNT}) have TDD patterns detected\n"
+        
+        avg_adoption_rate = self._compute_avg_adoption_rate()
+        self.output_log += f"Average TDD adoption rate for projects with TDD detected: {avg_adoption_rate:.2f}%\n"
+
+    def _compute_avg_adoption_rate(self):
+        """Compute the average TDD adoption rate across all projects with TDD detected.
+        
+        Returns the average percentage of TDD commits by summing all adoption rates
+        in _tdd_adoption_rate_list and dividing by the count of projects with TDD detected.
+        """
+        if self._projects_with_tdd_detected_count == 0:
+            return 0.0
+        
+        total_adoption_rate = sum(self._tdd_adoption_rate_list)
+        avg_adoption_rate = total_adoption_rate / self._projects_with_tdd_detected_count
+        return avg_adoption_rate
     
     def log_if_verbose(self, msg):
         """Print a message only if verbose mode is enabled."""
