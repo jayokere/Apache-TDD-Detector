@@ -360,13 +360,11 @@ class Static_Analysis:
         """Log the percentage of projects with TDD detected over the sample count."""
         percentage = (self._projects_with_tdd_detected_count / SAMPLE_COUNT * 100) if SAMPLE_COUNT > 0 else 0
         self.output_log += f"\nFinal Results: {percentage:.2f}% of {self._language} projects ({self._projects_with_tdd_detected_count}/{SAMPLE_COUNT}) have TDD patterns detected\n"
-
         avg_adoption_rate = self._compute_avg_adoption_rate()
         self.output_log += f"Average TDD adoption rate for projects with TDD detected: {avg_adoption_rate:.2f}%\n"
 
     def _compute_avg_adoption_rate(self):
         """Compute the average TDD adoption rate across all projects with TDD detected.
-
         Returns the average percentage of TDD commits by summing all adoption rates
         in _tdd_adoption_rate_list and dividing by the count of projects with TDD detected.
         """
@@ -433,7 +431,6 @@ def main() -> None:
     analysis.print_output_log()
     analysis.write_output_log()
     print(f"Analysis Complete! Check the analysis-output folder.")
-
 
 if __name__ == "__main__":
     main()
